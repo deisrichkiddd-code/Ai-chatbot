@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexus AI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #030712;
+      --surface: #0d1117;
+      --surface2: #161b27;
+      --border: rgba(255,255,255,0.06);
+      --border-bright: rgba(255,255,255,0.12);
+      --cyan: #00d4ff;
+      --cyan-dim: rgba(0,212,255,0.15);
+      --cyan-glow: rgba(0,212,255,0.35);
+      --emerald: #00ff9d;
+      --emerald-dim: rgba(0,255,157,0.12);
+      --amber: #ffb347;
+      --text: #e8eaf0;
+      --text-muted: rgba(232,234,240,0.45);
+      --text-faint: rgba(232,234,240,0.2);
+      --radius: 16px;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      color: var(--text);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── BACKGROUND ── */
+    #bg-canvas {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none;
+    }
+    .noise {
+      position: fixed; inset: 0; z-index: 1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 180px;
+    }
+    .grid-overlay {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%);
+    }
+
+    /* ── ALL CONTENT above bg ── */
+    header, #setup, #chatApp { position: relative; z-index: 10; }
+
+    /* ── HEADER ── */
+    header {
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      background: rgba(3,7,18,0.8);
+      backdrop-filter: blur(20px);
+    }
+
+    .logo-mark {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border-bright);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .logo-mark::before {
+      content: '';
+      position: absolute; inset: -1px;
+      background: conic-gradient(from 0deg, var(--cyan), var(--emerald), var(--cyan));
+      border-radius: 13px;
+      z-index: -1;
+      animation: spin 4s linear infinite;
+    }
+    .logo-mark::after {
+      content: '';
+      position: absolute; inset: 1px;
+      background: #0a0f1e;
+      border-radius: 11px;
+    }
+    .logo-mark svg { position: relative; z-index: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .header-info { flex: 1; }
+    .header-info h1 {
+      font-size: 16px; font-weight: 700;
+      letter-spacing: -0.3px;
+      background: linear-gradient(90deg, #fff 0%, var(--cyan) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .header-info .status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 500;
+      color: var(--emerald);
+      margin-top: 1px;
+    }
+    .pulse-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: pulse-anim 2s ease-in-out infinite;
+    }
+    @keyframes pulse-anim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+    #providerBadge {
+      display: none;
+      font-size: 11px; font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      letter-spacing: 0.3px;
+      transition: all 0.3s;
+    }
+    #providerBadge.groq {
+      background: rgba(255,179,71,0.1);
+      border: 1px solid rgba(255,179,71,0.3);
+      color: var(--amber);
+    }
+    #providerBadge.openai {
+      background: var(--emerald-dim);
+      border: 1px solid rgba(0,255,157,0.3);
+      color: var(--emerald);
+    }
+
+    #changeKeyBtn {
+      display: none;
+      margin-left: 8px;
+      padding: 6px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-bright);
+      border-radius: 10px;
+      color: var(--text-muted);
+      font-size: 12px; font-weight: 500;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    #changeKeyBtn:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border-color: var(--cyan);
+    }
+
+    /* ── SETUP ── */
+    #setup {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      gap: 24px;
+      animation: fadeUp 0.6s ease both;
+    }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+    .setup-icon {
+      width: 72px; height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,255,157,0.08));
+      border: 1px solid rgba(0,212,255,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+      box-shadow: 0 0 40px rgba(0,212,255,0.12), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .setup-title {
+      font-size: 28px; font-weight: 800;
+      letter-spacing: -0.8px;
+      text-align: center;
+      background: linear-gradient(135deg, #fff 20%, var(--cyan) 80%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .setup-sub {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.7;
+      font-weight: 400;
+    }
+    .setup-sub strong { color: var(--text); font-weight: 600; }
+
+    .provider-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%; max-width: 460px;
+    }
+    .pcard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      transition: all 0.25s;
+      cursor: default;
+    }
+    .pcard:hover { border-color: var(--border-bright); transform: translateY(-2px); }
+    .pcard-head {
+      font-size: 13px; font-weight: 700;
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .pcard.groq .pcard-head { color: var(--amber); }
+    .pcard.openai .pcard-head { color: var(--emerald); }
+    .pcard-body {
+      font-size: 12px; color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .pcard-body .chip {
+      display: inline-block;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 1px 7px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10.5px;
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .pcard-body a {
+      color: var(--cyan); text-decoration: none;
+      font-weight: 500; font-size: 11.5px;
+      display: inline-block; margin-top: 4px;
+    }
+    .pcard-body a:hover { text-decoration: underline; }
+
+    #corsWarning {
+      display: none;
+      background: rgba(255,70,70,0.08);
+      border: 1px solid rgba(255,70,70,0.25);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      max-width: 460px; width: 100%;
+      font-size: 12.5px; line-height: 1.8;
+      color: rgba(255,200,200,0.8);
+    }
+    #corsWarning strong { color: #ff7070; }
+    #corsWarning code {
+      background: rgba(0,0,0,0.4);
+      padding: 1px 7px; border-radius: 5px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px; color: #ffd580;
+    }
+
+    .input-field-wrap {
+      width: 100%; max-width: 460px;
+      position: relative;
+    }
+    .input-field-wrap::before {
+      content: '';
+      position: absolute; inset: -1px;
+      border-radius: calc(var(--radius) + 1px);
+      background: linear-gradient(135deg, var(--cyan), var(--emerald), var(--cyan));
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 0;
+      background-size: 200% 200%;
+      animation: gradShift 3s linear infinite;
+    }
+    @keyframes gradShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    .input-field-wrap:focus-within::before { opacity: 0.6; }
+    #apiKeyInput {
+      width: 100%; position: relative; z-index: 1;
+      padding: 15px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 14px; font-weight: 400;
+      font-family: 'DM Mono', monospace;
+      outline: none;
+      letter-spacing: 0.5px;
+      transition: border-color 0.2s;
+    }
+    #apiKeyInput:focus { border-color: transparent; }
+    #apiKeyInput::placeholder { color: var(--text-faint); font-family: 'Outfit', sans-serif; letter-spacing: 0; }
+
+    #detectedProvider {
+      font-size: 12px;
+      color: var(--text-faint);
+      min-height: 20px;
+      text-align: center;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .start-btn {
+      padding: 14px 48px;
+      background: linear-gradient(135deg, var(--cyan) 0%, #0099cc 100%);
+      border: none; border-radius: var(--radius);
+      color: #000; font-size: 15px; font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer; letter-spacing: -0.2px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 24px rgba(0,212,255,0.3), 0 1px 0 rgba(255,255,255,0.2) inset;
+    }
+    .start-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 32px rgba(0,212,255,0.45), 0 1px 0 rgba(255,255,255,0.2) inset;
+    }
+    .start-btn:active { transform: translateY(0); }
+
+    .setup-note {
+      font-size: 11.5px;
+      color: var(--text-faint);
+      text-align: center; max-width: 360px; line-height: 1.6;
+    }
+
+    /* ── CHAT APP ── */
+    #chatApp {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 28px 12px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    #messages::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    .msg { display: flex; gap: 12px; animation: msgIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+    @keyframes msgIn { from{opacity:0;transform:translateY(12px) scale(0.97)} to{opacity:1;transform:none} }
+    .msg.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 36px; height: 36px; border-radius: 11px;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+    }
+    .avatar.ai {
+      background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,255,157,0.1));
+      border: 1px solid rgba(0,212,255,0.3);
+      box-shadow: 0 0 12px rgba(0,212,255,0.15);
+    }
+    .avatar.user {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border-bright);
+    }
+
+    .bubble {
+      max-width: 72%;
+      padding: 14px 18px;
+      font-size: 14px;
+      line-height: 1.75;
+      font-weight: 400;
+    }
+    .msg.ai .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px 18px 18px 18px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.3);
+    }
+    .msg.user .bubble {
+      background: linear-gradient(135deg, rgba(0,212,255,0.18), rgba(0,153,204,0.22));
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 18px 4px 18px 18px;
+      color: #e8f8ff;
+    }
+
+    .bubble strong { color: var(--cyan); font-weight: 600; }
+    .bubble em { color: rgba(232,234,240,0.75); font-style: italic; }
+    .bubble code {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 2px 7px; border-radius: 5px;
+      font-family: 'DM Mono', monospace; font-size: 12.5px;
+      color: var(--emerald);
+    }
+    .bubble pre {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-left: 3px solid var(--cyan);
+      border-radius: 10px;
+      padding: 14px 16px; margin-top: 10px;
+      overflow-x: auto;
+      font-family: 'DM Mono', monospace; font-size: 12.5px;
+      color: #b4f0a0;
+      line-height: 1.6;
+    }
+    .bubble pre code { background:none; border:none; padding:0; color: inherit; font-size: inherit; }
+    .bubble ul, .bubble ol { padding-left: 22px; margin-top: 8px; }
+    .bubble li { margin-bottom: 5px; }
+    .bubble h3 { color: var(--cyan); margin: 12px 0 6px; font-size: 14px; font-weight: 700; letter-spacing: -0.2px; }
+    .bubble p { margin-bottom: 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble a { color: var(--cyan); text-decoration: none; }
+    .bubble a:hover { text-decoration: underline; }
+
+    /* Typing indicator */
+    .typing-dots { display: flex; gap: 5px; align-items: center; padding: 2px 0; }
+    .typing-dots span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--cyan);
+      opacity: 0.4;
+      animation: typeBounce 1.4s ease-in-out infinite;
+    }
+    .typing-dots span:nth-child(1){animation-delay:0s}
+    .typing-dots span:nth-child(2){animation-delay:0.2s}
+    .typing-dots span:nth-child(3){animation-delay:0.4s}
+    @keyframes typeBounce { 0%,60%,100%{transform:translateY(0);opacity:0.4} 30%{transform:translateY(-6px);opacity:1} }
+
+    /* ── INPUT AREA ── */
+    #inputArea {
+      padding: 16px 20px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .input-outer {
+      flex: 1;
+      position: relative;
+      border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .input-outer:focus-within {
+      border-color: rgba(0,212,255,0.5);
+      box-shadow: 0 0 0 3px rgba(0,212,255,0.08), 0 4px 20px rgba(0,0,0,0.3);
+    }
+    #userInput {
+      width: 100%; display: block;
+      background: transparent;
+      border: none; outline: none;
+      color: var(--text);
+      font-size: 14px; font-weight: 400;
+      font-family: 'Outfit', sans-serif;
+      padding: 13px 18px;
+      resize: none;
+      max-height: 140px;
+      line-height: 1.6;
+    }
+    #userInput::placeholder { color: var(--text-faint); }
+
+    .icon-btn {
+      width: 46px; height: 46px; flex-shrink: 0;
+      border-radius: 14px; border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    .icon-btn.mic {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      color: var(--text-muted);
+    }
+    .icon-btn.mic:hover { border-color: var(--border-bright); color: var(--text); background: var(--surface2); }
+    .icon-btn.mic.listening { background: rgba(255,70,80,0.15); border-color: rgba(255,70,80,0.4); color: #ff6b6b; }
+    .icon-btn.send {
+      background: linear-gradient(135deg, var(--cyan), #0095bb);
+      color: #000;
+      box-shadow: 0 4px 16px rgba(0,212,255,0.3);
+    }
+    .icon-btn.send:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,212,255,0.45); }
+    .icon-btn.send:active { transform: scale(0.95); }
+    .icon-btn.send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .chat-footer {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-faint);
+      padding: 0 0 12px;
+      letter-spacing: 0.3px;
+    }
+    .chat-footer span {
+      display: inline-flex; gap: 12px; align-items: center;
+    }
+    .chat-footer span::before, .chat-footer span::after {
+      content: '';
+      display: inline-block; width: 24px; height: 1px;
+      background: var(--border-bright);
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Animated background -->
+<canvas id="bg-canvas"></canvas>
+<div class="noise"></div>
+<div class="grid-overlay"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-mark">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" fill="url(#lg1)"/>
+      <path d="M2 17l10 5 10-5" stroke="url(#lg2)" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M2 12l10 5 10-5" stroke="url(#lg2)" stroke-width="1.5" stroke-linecap="round"/>
+      <defs>
+        <linearGradient id="lg1" x1="2" y1="7" x2="22" y2="7"><stop stop-color="#00d4ff"/><stop offset="1" stop-color="#00ff9d"/></linearGradient>
+        <linearGradient id="lg2" x1="2" y1="12" x2="22" y2="12"><stop stop-color="#00d4ff"/><stop offset="1" stop-color="#00ff9d"/></linearGradient>
+      </defs>
+    </svg>
+  </div>
+  <div class="header-info">
+    <h1>Nexus AI</h1>
+    <div class="status"><span class="pulse-dot"></span> Online · Ready</div>
+  </div>
+  <div id="providerBadge"></div>
+  <button id="changeKeyBtn" onclick="changeKey()">🔑 Change Key</button>
+</header>
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="setup-icon">🔑</div>
+  <div class="setup-title">Connect Your AI</div>
+  <p class="setup-sub">Supports <strong>Groq</strong> (free & blazing fast) and <strong>OpenAI</strong> (most capable). Paste your key — it's detected automatically.</p>
+
+  <div id="corsWarning">
+    ⚠️ <strong>File protocol detected</strong> — API calls may be blocked.<br>
+    Serve via local server: <code>npx serve .</code> → open <code>http://localhost:3000</code>
+  </div>
+
+  <div class="provider-cards">
+    <div class="pcard groq">
+      <div class="pcard-head">⚡ Groq</div>
+      <div class="pcard-body">
+        Free tier · Blazing fast<br>
+        Key: <span class="chip">gsk_…</span><br>
+        <a href="https://console.groq.com/keys" target="_blank">Get a free key →</a>
+      </div>
+    </div>
+    <div class="pcard openai">
+      <div class="pcard-head">◆ OpenAI</div>
+      <div class="pcard-body">
+        GPT-4o · Most capable<br>
+        Key: <span class="chip">sk-…</span><br>
+        <a href="https://platform.openai.com/api-keys" target="_blank">Get a key →</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-field-wrap">
+    <input type="password" id="apiKeyInput" placeholder="Paste your API key here…" autocomplete="off" />
+  </div>
+  <div id="detectedProvider"></div>
+  <button class="start-btn" onclick="startChat()">Start Chatting →</button>
+  <p class="setup-note">Your key lives only in browser memory — never logged, never stored, never shared.</p>
+</div>
+
+<!-- CHAT -->
+<div id="chatApp">
+  <div id="messages"></div>
+  <div id="inputArea">
+    <div class="input-outer">
+      <textarea id="userInput" rows="1" placeholder="Ask me anything…"></textarea>
+    </div>
+    <button class="icon-btn mic" id="micBtn" title="Voice input">
+      <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z"/></svg>
+    </button>
+    <button class="icon-btn send" id="sendBtn" title="Send">
+      <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+    </button>
+  </div>
+  <div class="chat-footer"><span>Nexus AI · Math · Code · Science · History · Anything</span></div>
+</div>
+
+<script>
+// ── Animated particle background ──
+(function() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function Particle() {
+    this.reset();
+  }
+  Particle.prototype.reset = function() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.r = Math.random() * 1.5 + 0.3;
+    this.vx = (Math.random() - 0.5) * 0.25;
+    this.vy = (Math.random() - 0.5) * 0.25;
+    this.alpha = Math.random() * 0.4 + 0.05;
+    this.color = Math.random() > 0.5 ? '0,212,255' : '0,255,157';
+  };
+  Particle.prototype.update = function() {
+    this.x += this.vx; this.y += this.vy;
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset();
+  };
+
+  resize();
+  for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+  // Orbs
+  const orbs = [
+    { x: 0.15, y: 0.2, r: 280, color: '0,212,255', alpha: 0.04 },
+    { x: 0.85, y: 0.7, r: 320, color: '0,255,157', alpha: 0.03 },
+    { x: 0.5, y: 0.5, r: 400, color: '0,150,200', alpha: 0.025 },
+  ];
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Orbs
+    orbs.forEach(o => {
+      const grd = ctx.createRadialGradient(o.x*W, o.y*H, 0, o.x*W, o.y*H, o.r);
+      grd.addColorStop(0, `rgba(${o.color},${o.alpha})`);
+      grd.addColorStop(1, 'transparent');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, W, H);
+    });
+
+    // Connections
+    particles.forEach((p, i) => {
+      p.update();
+      particles.slice(i + 1).forEach(q => {
+        const dx = p.x - q.x, dy = p.y - q.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 100) {
+          ctx.strokeStyle = `rgba(0,212,255,${0.06 * (1 - dist/100)})`;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+        }
+      });
+      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  draw();
+})();
+
+// ── App state ──
+let API_KEY = '', PROVIDER = '', chatHistory = [], isTyping = false;
+
+const PROVIDERS = {
+  groq:   { url: 'https://api.groq.com/openai/v1/chat/completions',  model: 'llama-3.3-70b-versatile', label: '⚡ Groq · Llama 3.3' },
+  openai: { url: 'https://api.openai.com/v1/chat/completions',        model: 'gpt-4o',                  label: '◆ OpenAI · GPT-4o'   }
+};
+
+// File protocol warning
+if (location.protocol === 'file:') document.getElementById('corsWarning').style.display = 'block';
+
+function detectProvider(key) {
+  if (key.startsWith('gsk_')) return 'groq';
+  if (key.startsWith('sk-'))  return 'openai';
+  return null;
+}
+
+document.getElementById('apiKeyInput').addEventListener('input', function() {
+  const p = detectProvider(this.value.trim()), el = document.getElementById('detectedProvider');
+  if (p === 'groq')        el.innerHTML = '✅ <span style="color:#ffb347">Groq key detected</span> — Llama 3.3 70B';
+  else if (p === 'openai') el.innerHTML = '✅ <span style="color:#00ff9d">OpenAI key detected</span> — GPT-4o';
+  else if (this.value.length > 4) el.innerHTML = '<span style="color:rgba(255,255,255,0.25)">Unrecognized format</span>';
+  else el.innerHTML = '';
+});
+document.getElementById('apiKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
+
+function startChat() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const provider = detectProvider(key);
+  if (!provider) { alert('Please enter a valid API key.\n• Groq keys start with gsk_\n• OpenAI keys start with sk-'); return; }
+  API_KEY = key; PROVIDER = provider;
+
+  document.getElementById('setup').style.display = 'none';
+  const app = document.getElementById('chatApp');
+  app.style.display = 'flex'; app.style.flexDirection = 'column';
+
+  const badge = document.getElementById('providerBadge');
+  badge.textContent = PROVIDERS[provider].label;
+  badge.className = provider; badge.style.display = 'block';
+  document.getElementById('changeKeyBtn').style.display = 'block';
+
+  addMessage('ai', `Hello! I'm **Nexus AI** powered by **${PROVIDERS[provider].label}**.\n\nAsk me anything — math, code, science, history, or whatever's on your mind.`);
+  document.getElementById('userInput').focus();
+}
+
+function changeKey() {
+  API_KEY = ''; PROVIDER = ''; chatHistory = []; isTyping = false;
+  document.getElementById('messages').innerHTML = '';
+  const badge = document.getElementById('providerBadge');
+  badge.style.display = 'none'; badge.className = '';
+  document.getElementById('changeKeyBtn').style.display = 'none';
+  document.getElementById('chatApp').style.display = 'none';
+  document.getElementById('setup').style.display = 'flex';
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('detectedProvider').innerHTML = '';
+  document.getElementById('apiKeyInput').focus();
+}
+
+// ── Markdown ──
+function esc(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function md(text) {
+  return text
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_,l,c) => `<pre><code>${esc(c.trim())}</code></pre>`)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^#{1,3} (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^\* (.+)$/gm, '<li>$1</li>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+    .replace(/(<li>[\s\S]*?<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+function addMessage(role, text) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div'); wrap.className = 'msg ' + role;
+  const av = document.createElement('div'); av.className = 'avatar ' + role;
+  av.textContent = role === 'ai' ? '✦' : '▲';
+  const bub = document.createElement('div'); bub.className = 'bubble';
+  bub.innerHTML = role === 'ai' ? '<p>' + md(text) + '</p>' : esc(text);
+  wrap.appendChild(av); wrap.appendChild(bub);
+  msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping() {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div'); wrap.className = 'msg ai'; wrap.id = 'typing-msg';
+  const av = document.createElement('div'); av.className = 'avatar ai'; av.textContent = '✦';
+  const bub = document.createElement('div'); bub.className = 'bubble';
+  bub.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  wrap.appendChild(av); wrap.appendChild(bub);
+  msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
+}
+function hideTyping() { const t = document.getElementById('typing-msg'); if (t) t.remove(); }
+
+async function sendMessage() {
+  const inp = document.getElementById('userInput');
+  const text = inp.value.trim();
+  if (!text || isTyping) return;
+  inp.value = ''; inp.style.height = 'auto'; isTyping = true;
+  document.getElementById('sendBtn').disabled = true;
+  addMessage('user', text);
+  chatHistory.push({ role: 'user', content: text });
+  showTyping();
+
+  const cfg = PROVIDERS[PROVIDER];
+  try {
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [
+          { role: 'system', content: 'You are Nexus AI, an exceptionally intelligent assistant. Answer questions clearly and accurately. For math, show steps. For code, use markdown code blocks. Use markdown formatting throughout.' },
+          ...chatHistory
+        ],
+        max_tokens: 2048, temperature: 0.7
+      })
+    });
+    const data = await res.json(); hideTyping();
+    if (data.error) {
+      addMessage('ai', `**Error:** ${data.error.message}\n\nPlease check your API key and try again.`);
+    } else {
+      const reply = data.choices[0].message.content;
+      chatHistory.push({ role: 'assistant', content: reply });
+      addMessage('ai', reply); speak(reply);
+    }
+  } catch (err) {
+    hideTyping();
+    const isFile = location.protocol === 'file:';
+    addMessage('ai', isFile
+      ? `**⚠️ CORS Error — File Protocol**\n\nYour browser is blocking API calls from \`file://\`.\n\n**Fix:** Run \`npx serve .\` and open \`http://localhost:3000\``
+      : `**Connection Error:** ${err.message}\n\nCheck your internet connection and API key.`);
+  }
+  isTyping = false;
+  document.getElementById('sendBtn').disabled = false;
+  inp.focus();
+}
+
+// ── Voice ──
+const micBtn = document.getElementById('micBtn');
+let recog = null, listening = false;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  recog = new SR(); recog.continuous = false; recog.interimResults = true; recog.lang = 'en-US';
+  recog.onstart = () => { listening = true; micBtn.classList.add('listening'); };
+  recog.onresult = e => {
+    let t = ''; for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript;
+    document.getElementById('userInput').value = t;
+    if (e.results[e.results.length-1].isFinal) setTimeout(sendMessage, 400);
+  };
+  recog.onerror = recog.onend = () => { listening = false; micBtn.classList.remove('listening'); };
+} else { micBtn.style.display = 'none'; }
+micBtn.onclick = () => { if (!recog) return; listening ? recog.stop() : (document.getElementById('userInput').value='', recog.start()); };
+
+function speak(text) {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/\*\*/g,'').replace(/\*/g,'').replace(/`/g,'').replace(/#+/g,'').substring(0,300));
+    u.rate = 1; u.pitch = 1; window.speechSynthesis.speak(u);
+  }
+}
+
+document.getElementById('sendBtn').onclick = sendMessage;
+document.getElementById('userInput').addEventListener('keydown', e => { if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
+document.getElementById('userInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+});
+</script>
+</body>
+</html>

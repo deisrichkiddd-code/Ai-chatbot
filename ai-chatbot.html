@@ -4,37 +4,125 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Chatbot</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="script.js" defer></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            height: 100vh;
+            padding: 20px;
+        }
+        #messages {
+            overflow-y: auto;
+            flex-grow: 1;
+            margin-bottom: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #222;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 5px;
+            animation: fadeIn 0.5s;
+        }
+        .user {
+            background-color: #007bff;
+            align-self: flex-end;
+        }
+        .ai {
+            background-color: #555;
+            align-self: flex-start;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        #input {
+            display: flex;
+        }
+        #text-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background-color: #333;
+            color: white;
+        }
+        #send-btn {
+            padding: 10px 20px;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
+        #send-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
 </head>
 <body>
-    <div class="chat-container">
-        <h1>Welcome to AI Chatbot</h1>
-        <div id="chat-window">
-            <!-- Chat messages will appear here -->
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div id="input">
+            <input type="text" id="text-input" placeholder="Type your message..." />
+            <button id="send-btn">Send</button>
         </div>
-        <input type="text" id="user-input" placeholder="Type a message...">
-        <button id="send-button">Send</button>
     </div>
     <script>
-        // Original JavaScript functionality intact
-        const sendButton = document.getElementById('send-button');
-        const userInput = document.getElementById('user-input');
-        const chatWindow = document.getElementById('chat-window');
+        const messagesContainer = document.getElementById('messages');
+        const textInput = document.getElementById('text-input');
+        const sendBtn = document.getElementById('send-btn');
 
-        sendButton.addEventListener('click', function() {
-            const userMessage = userInput.value;
-            // Add message to chat window
-            chatWindow.innerHTML += `<div class='user-message'>${userMessage}</div>`;
-            userInput.value = '';
-            // Handle AI responses
-            respondToUser(userMessage);
-        });
-
-        function respondToUser(message) {
-            // Simulate an AI response
-            chatWindow.innerHTML += `<div class='ai-message'>AI Chatbot response to: ${message}</div>`;
+        function appendMessage(content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', type);
+            messageDiv.textContent = content;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+
+        sendBtn.onclick = async function() {
+            const userInput = textInput.value;
+            appendMessage(userInput, 'user');
+            textInput.value = '';
+
+            // Integrate with Groq/OpenAI API
+            const response = await getAIResponse(userInput);
+            appendMessage(response, 'ai');
+        };
+
+        async function getAIResponse(input) {
+            // Example integration with Groq/OpenAI
+            const response = await fetch('YOUR_API_ENDPOINT', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: input }),
+            });
+            const data = await response.json();
+            return data.result;
+        }
+
+        // Voice Support - Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            textInput.value = transcript;
+            sendBtn.click();
+        };
+        recognition.onend = () => recognition.start();
+        recognition.start();
     </script>
 </body>
 </html>
